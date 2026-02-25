@@ -63,3 +63,6 @@ The system will output a series of Evidence Objects in the terminal:
 - Phase 1-2: Detective Swarm & Evidence Aggregation. (Completed)
 - Phase 3: Judicial Debate (Prosecutor vs. Defense vs. Tech Lead).
 - Phase 4: Chief Justice Synthesis & Remediation Planning.
+
+## **General Architecture**
+<img width="5406" height="4505" alt="image" src="https://github.com/user-attachments/assets/05100c0c-dd3f-4316-9f33-994e4c29a366" />
