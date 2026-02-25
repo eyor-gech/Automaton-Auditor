@@ -1,25 +1,61 @@
 from langgraph.graph import StateGraph, START, END
-from src.state import AgentState
-from src.nodes.detectives import repo_investigator_node, doc_analyst_node
 from src.state import AgentState, Evidence
+from src.nodes.detectives import repo_investigator_node, doc_analyst_node
 
 # 1. Initialize the Graph with the schema
 builder = StateGraph(AgentState)
 
-# 2. Add Detective Nodes
-builder.add_node("repo_investigator", repo_investigator_node)
-builder.add_node("doc_analyst", doc_analyst_node)
+#  WRAPPERS FOR ERROR HANDLING 
 
-# 3. Aggregator Node
+def safe_repo_investigator(state: AgentState) -> dict:
+    """Error-resilient wrapper for repo analysis."""
+    try:
+        return repo_investigator_node(state)
+    except Exception as e:
+        error_ev = Evidence(
+            goal="Repo Investigation",
+            found=False,
+            location="Git/System",
+            rationale=f"CRITICAL ERROR: {str(e)}",
+            confidence=1.0
+        )
+        return {"evidences": {"repo_investigator": [error_ev]}}
+
+def safe_doc_analyst(state: AgentState) -> dict:
+    """Error-resilient wrapper for document analysis."""
+    try:
+        return doc_analyst_node(state)
+    except Exception as e:
+        error_ev = Evidence(
+            goal="Document Analysis",
+            found=False,
+            location="PDF/System",
+            rationale=f"CRITICAL ERROR: {str(e)}",
+            confidence=1.0
+        )
+        return {"evidences": {"doc_analyst": [error_ev]}}
+
+# 2. Add Wrapped Nodes
+builder.add_node("repo_investigator", safe_repo_investigator)
+builder.add_node("doc_analyst", safe_doc_analyst)
+
+# 3. Aggregator Node (Already mostly safe, but let's ensure it handles missing data)
 def evidence_aggregator(state: AgentState) -> dict:
-    """
-    Forensic Cross-Referencing: Compares PDF claims vs Repo facts.
-    This creates 'Conflict Evidence' for the Judges to review.
-    """
-    repo_ev = state["evidences"].get("repo_investigator", [])
-    doc_ev = state["evidences"].get("doc_analyst", [])
+    """Forensic Cross-Referencing with safety checks."""
+    repo_ev = state.get("evidences", {}).get("repo_investigator", [])
+    doc_ev = state.get("evidences", {}).get("doc_analyst", [])
     
-    # Check: Did the PDF claim 'Parallel' but AST found 'Linear'?
+    # Check for systemic errors caught by wrappers
+    if any("CRITICAL ERROR" in e.rationale for e in repo_ev + doc_ev):
+        return {"evidences": {"aggregator": [Evidence(
+            goal="System Integrity",
+            found=False,
+            location="Swarm Infrastructure",
+            rationale="Audit halted for specific branch due to I/O failure.",
+            confidence=1.0
+        )]}}
+
+    # Logic Sync: Claims vs Reality
     pdf_claims_parallel = "Parallel Execution" in str(doc_ev[0].content) if doc_ev else False
     ast_found_parallel = any(e.found for e in repo_ev if "parallel" in e.goal.lower())
     
@@ -29,24 +65,19 @@ def evidence_aggregator(state: AgentState) -> dict:
             goal="Cross-reference Parallelism",
             found=False,
             location="Logic Sync",
-            rationale="HALLUCINATION ALERT: PDF claims parallel execution, but AST analysis of src/graph.py found linear wiring.",
+            rationale="HALLUCINATION ALERT: PDF claims parallel execution, but AST analysis found linear wiring.",
             confidence=1.0
         ))
     
-    # If conflicts exist, we add them to the evidence pool
-    if conflicts:
-        return {"evidences": {"aggregator": conflicts}}
-    
-    return {} # No changes needed if no conflicts
+    return {"evidences": {"aggregator": conflicts}} if conflicts else {}
 
 builder.add_node("aggregator", evidence_aggregator)
 
-# 4. Phase 3 Wiring: PARALLEL FAN-OUT
-# Both detectives start at the same time
+# 4. Wiring: PARALLEL FAN-OUT
 builder.add_edge(START, "repo_investigator")
 builder.add_edge(START, "doc_analyst")
 
-# 5. FAN-IN: Synchronize before moving to Judges
+# 5. FAN-IN: Synchronize
 builder.add_edge("repo_investigator", "aggregator")
 builder.add_edge("doc_analyst", "aggregator")
 
