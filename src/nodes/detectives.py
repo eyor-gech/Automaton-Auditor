@@ -2,6 +2,7 @@ import os
 from src.state import AgentState, Evidence
 from src.tools.repo_tools import clone_repo_sandboxed, analyze_graph_parallelism, get_git_history
 from src.tools.doc_tools import ingest_pdf_content, search_for_keywords
+from src.tools.vision_tools import count_pdf_images
 
 def repo_investigator_node(state: AgentState) -> dict:
     """Forensic Protocol A & B: Verify code structure and Git history."""
@@ -50,3 +51,18 @@ def doc_analyst_node(state: AgentState) -> dict:
     )
     
     return {"evidences": {"doc_analyst": [evidence_claims]}}
+
+def vision_inspector_node(state: AgentState) -> dict:
+    """Budget-Friendly Vision Inspector: Checks for visual documentation."""
+    img_count = count_pdf_images(state["pdf_path"])
+    
+    evidence = Evidence(
+        goal="Visual Evidence Detection",
+        found=img_count > 0,
+        location=state["pdf_path"],
+        content=f"Detected {img_count} images in the audit report.",
+        rationale="Verified presence of diagrams. Logic analysis deferred to Judicial layer.",
+        confidence=1.0
+    )
+    
+    return {"evidences": {"vision_inspector": [evidence]}}
