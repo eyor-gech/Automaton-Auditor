@@ -1,103 +1,127 @@
 from langgraph.graph import StateGraph, START, END
 from src.state import AgentState, Evidence
-from src.nodes.detectives import repo_investigator_node, doc_analyst_node, vision_inspector_node
+from src.nodes.detectives import (
+    repo_investigator_node,
+    doc_analyst_node,
+    vision_inspector_node,
+)
 
-# 1. Initialize the Graph
 builder = StateGraph(AgentState)
 
-# --- WRAPPERS FOR ERROR HANDLING ---
+# ---------------------------------
+# SAFE WRAPPERS (UNCHANGED CORE)
+# ---------------------------------
 
-def safe_repo_investigator(state: AgentState) -> dict:
-    try:
-        return repo_investigator_node(state)
-    except Exception as e:
-        error_ev = Evidence(
-            goal="Repo Investigation",
-            found=False,
-            location="Git/System",
-            rationale=f"CRITICAL ERROR: {str(e)}",
-            confidence=1.0
-        )
-        return {"evidences": {"repo_investigator": [error_ev]}}
+def safe_wrapper(node_fn, label):
+    def wrapped(state: AgentState) -> dict:
+        try:
+            return node_fn(state)
+        except Exception as e:
+            error_ev = Evidence(
+                goal=f"{label} Failure",
+                found=False,
+                location=f"{label}/System",
+                rationale=f"CRITICAL ERROR: {str(e)}",
+                confidence=1.0
+            )
+            return {
+                "evidences": {label: [error_ev]},
+                "status": "error"
+            }
+    return wrapped
 
-def safe_doc_analyst(state: AgentState) -> dict:
-    try:
-        return doc_analyst_node(state)
-    except Exception as e:
-        error_ev = Evidence(
-            goal="Document Analysis",
-            found=False,
-            location="PDF/System",
-            rationale=f"CRITICAL ERROR: {str(e)}",
-            confidence=1.0
-        )
-        return {"evidences": {"doc_analyst": [error_ev]}}
 
-def safe_vision_inspector(state: AgentState) -> dict:
-    try:
-        return vision_inspector_node(state)
-    except Exception as e:
-        error_ev = Evidence(
-            goal="Vision Analysis",
-            found=False,
-            location="Image/System",
-            rationale=f"CRITICAL ERROR: {str(e)}",
-            confidence=1.0
-        )
-        return {"evidences": {"vision_inspector": [error_ev]}}
+builder.add_node("repo_investigator", safe_wrapper(repo_investigator_node, "repo"))
+builder.add_node("doc_analyst", safe_wrapper(doc_analyst_node, "doc"))
+builder.add_node("vision_inspector", safe_wrapper(vision_inspector_node, "vision"))
 
-# 2. Add All Detective Nodes
-builder.add_node("repo_investigator", safe_repo_investigator)
-builder.add_node("doc_analyst", safe_doc_analyst)
-builder.add_node("vision_inspector", safe_vision_inspector)
 
-# 3. Aggregator Node
+# ---------------------------------
+# AGGREGATOR (FAILURE AWARE)
+# ---------------------------------
+
 def evidence_aggregator(state: AgentState) -> dict:
-    """Forensic Cross-Referencing: Repo vs Doc vs Vision."""
-    repo_ev = state.get("evidences", {}).get("repo_investigator", [])
-    doc_ev = state.get("evidences", {}).get("doc_analyst", [])
-    vision_ev = state.get("evidences", {}).get("vision_inspector", [])
-    
-    # Logic Sync: Check for conflicts
-    pdf_claims_parallel = "Parallel Execution" in str(doc_ev[0].content) if doc_ev else False
-    ast_found_parallel = any(e.found for e in repo_ev if "parallel" in e.goal.lower())
-    
+    evidences = state.get("evidences", {})
+    status = state.get("status")
+
     conflicts = []
-    # Conflict 1: Text vs Code
-    if pdf_claims_parallel and not ast_found_parallel:
+
+    if status == "error":
         conflicts.append(Evidence(
-            goal="Cross-reference Parallelism",
+            goal="Pipeline Integrity",
             found=False,
-            location="Logic Sync",
-            rationale="HALLUCINATION ALERT: PDF text claims parallel execution, but AST found linear wiring.",
+            location="Graph",
+            rationale="One or more detectives failed.",
             confidence=1.0
         ))
-    
-    # Conflict 2: Vision vs Code (If images exist but code is linear)
-    has_diagrams = any(e.found for e in vision_ev)
-    if has_diagrams and not ast_found_parallel:
-        conflicts.append(Evidence(
-            goal="Visual vs Structural Sync",
-            found=False,
-            location="Architecture Sync",
-            rationale="DISCREPANCY: Architecture diagrams exist, but code does not implement the parallel patterns shown.",
-            confidence=0.8
-        ))
-    
+
     return {"evidences": {"aggregator": conflicts}} if conflicts else {}
+
 
 builder.add_node("aggregator", evidence_aggregator)
 
-# 4. TRIPLE FAN-OUT (The Multi-Modal Split)
+
+# ---------------------------------
+# CONDITIONAL EDGES
+# ---------------------------------
+
+def route_on_status(state: AgentState):
+    if state.get("status") == "error":
+        return "aggregator"
+    return "aggregator"
+
+
+builder.add_conditional_edges(
+    "repo_investigator",
+    route_on_status
+)
+
+builder.add_conditional_edges(
+    "doc_analyst",
+    route_on_status
+)
+
+builder.add_conditional_edges(
+    "vision_inspector",
+    route_on_status
+)
+
+
+# ---------------------------------
+# PARALLEL FAN-OUT
+# ---------------------------------
+
 builder.add_edge(START, "repo_investigator")
 builder.add_edge(START, "doc_analyst")
 builder.add_edge(START, "vision_inspector")
 
-# 5. FAN-IN (The Forensic Sync)
+# FAN-IN
 builder.add_edge("repo_investigator", "aggregator")
 builder.add_edge("doc_analyst", "aggregator")
 builder.add_edge("vision_inspector", "aggregator")
 
 builder.add_edge("aggregator", END)
+
+
+# ---------------------------------
+# JUDICIAL EXTENSION SKETCH
+# ---------------------------------
+"""
+Future Judicial Layer:
+
+aggregator → judicial_reasoner_1
+aggregator → judicial_reasoner_2
+aggregator → judicial_reasoner_3
+
+Then:
+
+judicial_reasoner_* → final_verdict_node → END
+
+This enables:
+- Multi-judge reasoning
+- Majority voting
+- Confidence aggregation
+- Legal-grade explainability
+"""
 
 graph = builder.compile()

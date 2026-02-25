@@ -66,3 +66,12 @@ The system will output a series of Evidence Objects in the terminal:
 
 ## **General Architecture**
 <img width="5406" height="4505" alt="image" src="https://github.com/user-attachments/assets/05100c0c-dd3f-4316-9f33-994e4c29a366" />
+
+## Run Full Audit
+```bash
+uv lock
+uv sync
+uv run python main.py \
+  --repo https://github.com/user/project.git \
+  --pdf ./report.pdf
+```
