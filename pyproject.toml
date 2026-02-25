@@ -1,0 +1,19 @@
+[project]
+name = "automaton-auditor"
+version = "0.1.0"
+description = "Deep LangGraph Swarm for Autonomous Governance"
+dependencies = [
+    "langgraph>=0.0.15",
+    "langchain-openai",
+    "langchain-google-genai",
+    "pydantic>=2.0.0",
+    "python-dotenv",
+    "pdfminer.six",
+    "docling",
+    "gitingest",
+    "gitpython",
+]
+
+[tool.uv]
+managed = true
+
