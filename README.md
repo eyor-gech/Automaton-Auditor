@@ -1,6 +1,6 @@
 **Description**: Automated Auditor Swarms for QA: Multi-agent system that verifies code, evaluates architecture, and provides actionable feedback.
 
-🕵️ **Automaton-Auditor**
+# 🕵️ **Automaton-Auditor**
 ## **Forensic Governance Swarm for AI-Generated Code**
 - Automaton-Auditor is a multi-agent system built on LangGraph designed to perform high-integrity audits of software repositories. Moving beyond "vibe-based" reviews, it uses a Triple-Diamond architecture to cross-reference code (AST), documentation (OCR/Markdown), and visual diagrams (Vision) to identify hallucinations and architectural drift.
 ## **🏗️ Architecture: The Triple-Threat Fan-Out**
@@ -43,9 +43,9 @@ You can modify the test script or pass arguments to the AgentState:
 - **pdf_path**: Local path to the student's architecture/interim report (PDF).
 **Output Expectations**
 The system will output a series of Evidence Objects in the terminal:
-  - ✅ Success: Artifact found (e.g., AST confirms Parallel wiring).
-  - ❌ Forensic Violation: Discrepancy found (e.g., Hallucination Alert
-  - ⚠️ System Error: Handled gracefully (e.g., 404 Repo URL detected).
+  - **✅ Success**: Artifact found (e.g., AST confirms Parallel wiring).
+  - **❌ Forensic Violation**: Discrepancy found (e.g., Hallucination Alert
+  - **⚠️ System Error**: Handled gracefully (e.g., 404 Repo URL detected).
 
 ## **📂 Project Structure**
 ```Plaintext
@@ -55,6 +55,7 @@ The system will output a series of Evidence Objects in the terminal:
 │   ├── state.py         # Pydantic schemas & Graph state
 │   └── graph.py         # LangGraph orchestration logic
 ├── tests/               # Stress tests & wiring verification
+├── reports/             # Interim Report
 ├── pyproject.toml       # Locked dependency manifest
 └── README.md            # This document
 ```
