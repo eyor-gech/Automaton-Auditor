@@ -12,6 +12,7 @@ dependencies = [
     "docling",
     "gitingest",
     "gitpython",
+    "grandalf>=0.8",
 ]
 
 [tool.uv]
