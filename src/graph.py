@@ -1,127 +1,80 @@
+from typing import Literal
 from langgraph.graph import StateGraph, START, END
-from src.state import AgentState, Evidence
+from src.state import AgentState
+
+# 1. Node Imports
 from src.nodes.detectives import (
-    repo_investigator_node,
-    doc_analyst_node,
-    vision_inspector_node,
+    repo_investigator_node, 
+    doc_analyst_node, 
+    vision_inspector_node
 )
-
-builder = StateGraph(AgentState)
-
-# ---------------------------------
-# SAFE WRAPPERS (UNCHANGED CORE)
-# ---------------------------------
-
-def safe_wrapper(node_fn, label):
-    def wrapped(state: AgentState) -> dict:
-        try:
-            return node_fn(state)
-        except Exception as e:
-            error_ev = Evidence(
-                goal=f"{label} Failure",
-                found=False,
-                location=f"{label}/System",
-                rationale=f"CRITICAL ERROR: {str(e)}",
-                confidence=1.0
-            )
-            return {
-                "evidences": {label: [error_ev]},
-                "status": "error"
-            }
-    return wrapped
-
-
-builder.add_node("repo_investigator", safe_wrapper(repo_investigator_node, "repo"))
-builder.add_node("doc_analyst", safe_wrapper(doc_analyst_node, "doc"))
-builder.add_node("vision_inspector", safe_wrapper(vision_inspector_node, "vision"))
-
+from src.nodes.judges import (
+    prosecutor_node, 
+    defense_node, 
+    tech_lead_node
+)
+from src.nodes.chief_justice import chief_justice_node
 
 # ---------------------------------
-# AGGREGATOR (FAILURE AWARE)
+# 2. AGGREGATOR & ROUTER
 # ---------------------------------
 
 def evidence_aggregator(state: AgentState) -> dict:
+    """
+    CONSTITUTIONAL FAN-IN: Synchronizes all detective evidence.
+    Ensures judges receive a complete evidentiary record.
+    """
+    # Verify we have evidence before proceeding to trial
     evidences = state.get("evidences", {})
-    status = state.get("status")
+    if not evidences:
+        return {"status": "error_no_evidence"}
+        
+    return {"status": "evidence_synchronized"}
 
-    conflicts = []
+# ---------------------------------
+# 3. GRAPH CONSTRUCTION
+# ---------------------------------
 
-    if status == "error":
-        conflicts.append(Evidence(
-            goal="Pipeline Integrity",
-            found=False,
-            location="Graph",
-            rationale="One or more detectives failed.",
-            confidence=1.0
-        ))
+builder = StateGraph(AgentState)
 
-    return {"evidences": {"aggregator": conflicts}} if conflicts else {}
-
-
+# --- Add Detective Nodes ---
+builder.add_node("repo_investigator", repo_investigator_node)
+builder.add_node("doc_analyst", doc_analyst_node)
+builder.add_node("vision_inspector", vision_inspector_node)
 builder.add_node("aggregator", evidence_aggregator)
 
+# --- Add Judicial Nodes (Phase 4) ---
+builder.add_node("prosecutor", prosecutor_node)
+builder.add_node("defense", defense_node)
+builder.add_node("tech_lead", tech_lead_node)
+builder.add_node("chief_justice", chief_justice_node)
 
 # ---------------------------------
-# CONDITIONAL EDGES
+# 4. THE CONSTITUTIONAL WIRING
 # ---------------------------------
 
-def route_on_status(state: AgentState):
-    if state.get("status") == "error":
-        return "aggregator"
-    return "aggregator"
-
-
-builder.add_conditional_edges(
-    "repo_investigator",
-    route_on_status
-)
-
-builder.add_conditional_edges(
-    "doc_analyst",
-    route_on_status
-)
-
-builder.add_conditional_edges(
-    "vision_inspector",
-    route_on_status
-)
-
-
-# ---------------------------------
-# PARALLEL FAN-OUT
-# ---------------------------------
-
+# LAYER 1: Parallel Fact-Finding (Fan-Out)
 builder.add_edge(START, "repo_investigator")
 builder.add_edge(START, "doc_analyst")
 builder.add_edge(START, "vision_inspector")
 
-# FAN-IN
+# LAYER 2: Synchronization (Fan-In)
 builder.add_edge("repo_investigator", "aggregator")
 builder.add_edge("doc_analyst", "aggregator")
 builder.add_edge("vision_inspector", "aggregator")
 
-builder.add_edge("aggregator", END)
+# LAYER 3: Adversarial Debate (Fan-Out)
+builder.add_edge("aggregator", "prosecutor")
+builder.add_edge("aggregator", "defense")
+builder.add_edge("aggregator", "tech_lead")
 
+# LAYER 4: Synthesis & Verdict (Fan-In)
+builder.add_edge("prosecutor", "chief_justice")
+builder.add_edge("defense", "chief_justice")
+builder.add_edge("tech_lead", "chief_justice")
 
-# ---------------------------------
-# JUDICIAL EXTENSION SKETCH
-# ---------------------------------
-"""
-Future Judicial Layer:
+# Final Exit
+builder.add_edge("chief_justice", END)
 
-aggregator → judicial_reasoner_1
-aggregator → judicial_reasoner_2
-aggregator → judicial_reasoner_3
-
-Then:
-
-judicial_reasoner_* → final_verdict_node → END
-
-This enables:
-- Multi-judge reasoning
-- Majority voting
-- Confidence aggregation
-- Legal-grade explainability
-"""
-
+# Compile the Graph
 graph = builder.compile()

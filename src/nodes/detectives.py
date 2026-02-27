@@ -1,143 +1,77 @@
 import os
 from src.state import AgentState, Evidence
-from src.tools.repo_tools import clone_repo_sandboxed, analyze_graph_parallelism, get_git_history
-from src.tools.doc_tools import ingest_pdf_content, search_for_keywords
+from src.tools.repo_tools import clone_repo_sandboxed, analyze_repo_complexity, get_git_history
+from src.tools.doc_tools import ingest_pdf_semantically, query_pdf_chunks
 from src.tools.vision_tools import count_pdf_images
 
 def repo_investigator_node(state: AgentState) -> dict:
-    """Forensic Protocol A & B: Verify code structure and Git history."""
+    """Fact-finding node for the Repository using AST and Git history."""
+    repo_url = state.get("repo_url")
+    if not repo_url:
+        return {"evidences": {"repo_investigator": []}}
+
     evidences = []
-
-    # Clone repository safely
     try:
-        repo_url = state.get("repo_url")
-        if not repo_url:
-            raise ValueError("Missing 'repo_url' in state")
-        repo_path = clone_repo_sandboxed(repo_url)
-    except Exception as e:
-        evidences.append(Evidence(
-            goal="Clone repository",
-            found=False,
-            location="repo_url",
-            rationale=f"Failed to clone repo: {e}",
-            confidence=0.2
-        ))
-        repo_path = None  # downstream checks will skip
-
-    # AST Parallelism Check
-    if repo_path:
-        try:
-            graph_file = os.path.join(repo_path, "src/graph.py")
-            is_parallel = analyze_graph_parallelism(graph_file)
+        with clone_repo_sandboxed(repo_url) as tmp_dir:
+            stats = analyze_repo_complexity(tmp_dir)
             evidences.append(Evidence(
-                goal="Verify parallel graph wiring",
-                found=is_parallel,
-                location="src/graph.py",
-                rationale="AST parsing checked for parallel add_edge calls with list arguments.",
+                goal="Technical Pattern Analysis",
+                found=stats["parallel_wiring"],
+                location="AST Analysis",
+                content=f"Parallel: {stats['parallel_wiring']}, Models: {stats['pydantic_models']}",
+                rationale="Verified code patterns for graph wiring and state management.",
                 confidence=1.0
             ))
-        except Exception as e:
-            evidences.append(Evidence(
-                goal="Verify parallel graph wiring",
-                found=False,
-                location="src/graph.py",
-                rationale=f"Failed analysis: {e}",
-                confidence=0.3
-            ))
 
-    # Git History Extraction
-    if repo_path:
-        try:
-            history = get_git_history(repo_path)
-            evidences.append(Evidence(
-                goal="Extract full commit history",
-                found=len(history) > 0,
-                location=".git/logs",
-                content="\n".join(history[:10]) if history else "",
-                rationale="Verified progression through atomic commit logs.",
-                confidence=1.0 if history else 0.2
-            ))
-        except Exception as e:
-            evidences.append(Evidence(
-                goal="Extract full commit history",
-                found=False,
-                location=".git/logs",
-                rationale=f"Failed to get git history: {e}",
-                confidence=0.2
-            ))
+            history = get_git_history(tmp_dir)
+            if isinstance(history, list):
+                evidences.append(Evidence(
+                    goal="Commit History Audit",
+                    found=len(history) > 0,
+                    location="Git Logs",
+                    content=str(history[:3]),
+                    rationale="Extracted commit logs for effort validation.",
+                    confidence=1.0
+                ))
+    except Exception as e:
+        evidences.append(Evidence(goal="Repo Check", found=False, location="Git", rationale=str(e), confidence=1.0))
 
     return {"evidences": {"repo_investigator": evidences}}
 
 def doc_analyst_node(state: AgentState) -> dict:
-    """Forensic Protocol B: Cross-reference PDF claims."""
-    evidences = []
-
+    """Fact-finding node for the PDF using semantic chunking."""
     pdf_path = state.get("pdf_path")
-    if not pdf_path:
-        evidences.append(Evidence(
-            goal="Identify architectural claims in PDF",
-            found=False,
-            location="pdf_path",
-            rationale="PDF path missing in state.",
-            confidence=0.0
-        ))
-        return {"evidences": {"doc_analyst": evidences}}
+    if not pdf_path or not os.path.exists(pdf_path):
+        return {"evidences": {"doc_analyst": []}}
 
+    evidences = []
     try:
-        content = ingest_pdf_content(pdf_path)
-        keywords = ["Dialectical Synthesis", "AST Parsing", "Parallel Execution", "Pydantic"]
-        findings = search_for_keywords(content, keywords)
+        data = ingest_pdf_semantically(pdf_path)
+        chunks = data.get("chunks", [])
+        
+        # Search for core architectural claims
+        matches = query_pdf_chunks(chunks, "parallel")
         evidences.append(Evidence(
-            goal="Identify architectural claims in PDF",
-            found=True,
+            goal="Identify Arch Claims",
+            found=len(matches) > 0,
             location=pdf_path,
-            content=str(findings),
-            rationale="Extracted theoretical claims to be verified against code.",
+            content=matches[0]["content"] if matches else "No parallel claims found.",
+            rationale="Queried semantic chunks for architectural keywords.",
             confidence=0.9
         ))
     except Exception as e:
-        evidences.append(Evidence(
-            goal="Identify architectural claims in PDF",
-            found=False,
-            location=pdf_path,
-            rationale=f"Failed to process PDF: {e}",
-            confidence=0.2
-        ))
+        evidences.append(Evidence(goal="PDF Analysis", found=False, location="PDF", rationale=str(e), confidence=1.0))
 
     return {"evidences": {"doc_analyst": evidences}}
 
 def vision_inspector_node(state: AgentState) -> dict:
-    """Budget-Friendly Vision Inspector: Checks for visual documentation."""
-    evidences = []
-
+    """Heuristic Vision: Checks for visual documentation."""
     pdf_path = state.get("pdf_path")
-    if not pdf_path:
-        evidences.append(Evidence(
-            goal="Visual Evidence Detection",
-            found=False,
-            location="pdf_path",
-            rationale="PDF path missing in state.",
-            confidence=0.0
-        ))
-        return {"evidences": {"vision_inspector": evidences}}
-
     try:
         img_count = count_pdf_images(pdf_path)
-        evidences.append(Evidence(
-            goal="Visual Evidence Detection",
-            found=img_count > 0,
-            location=pdf_path,
-            content=f"Detected {img_count} images in the audit report.",
-            rationale="Verified presence of diagrams. Logic analysis deferred to Judicial layer.",
-            confidence=1.0
-        ))
-    except Exception as e:
-        evidences.append(Evidence(
-            goal="Visual Evidence Detection",
-            found=False,
-            location=pdf_path,
-            rationale=f"Failed to count images: {e}",
-            confidence=0.2
-        ))
-
-    return {"evidences": {"vision_inspector": evidences}}
+        return {"evidences": {"vision_inspector": [Evidence(
+            goal="Visual Asset Detection", found=img_count > 0, location="PDF",
+            content=f"Images: {img_count}", rationale="Checked for diagrams.", confidence=1.0
+        )]}}
+    except:
+        return {"evidences": {"vision_inspector": []}}
