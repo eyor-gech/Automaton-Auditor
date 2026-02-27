@@ -1,0 +1,5 @@
+{
+  "technical_accuracy": "Verify if the LangGraph implementation matches the architectural claims in the PDF.",
+  "code_quality": "Evaluate the use of Pydantic models, type hinting, and state management.",
+  "git_discipline": "Assess the commit history for atomic changes and clear documentation."
+}
