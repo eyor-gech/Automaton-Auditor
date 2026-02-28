@@ -5,59 +5,82 @@ from src.nodes.aggregator import aggregator_node
 from src.nodes.judges import prosecutor_node, defense_node, tech_lead_node
 from src.nodes.chief_justice import chief_justice_node
 
+
 def evidence_guard(state: AgentState):
     """
-    Deterministic Router: Ensures we don't waste LLM tokens if 
-    detectives fail to find usable evidence.
+    Deterministic routing logic.
+    If no valid evidence exists, terminate early.
     """
     brief = state.get("aggregated_brief")
-    if not brief or not getattr(brief, 'evidences', None) or len(brief.evidences) == 0:
+
+    if not brief:
         return "fail"
+
+    evidences = brief.get("evidences", [])
+    if not evidences:
+        return "fail"
+
     return "ok"
+
+
+def judges_router(state: AgentState):
+    """
+    Pass-through router node.
+    Required because LangGraph conditional edges
+    cannot return multiple destination nodes.
+    """
+    return state
+
+
+# --------------------------------------------------
+# GRAPH CONSTRUCTION
+# --------------------------------------------------
 
 builder = StateGraph(AgentState)
 
-# --- 1. Detective Layer (Parallel Fan-Out) ---
+# 1️⃣ Add Nodes
 builder.add_node("detect_repo", repo_investigator_node)
 builder.add_node("detect_doc", doc_analyst_node)
-
-# --- 2. Aggregator (Fan-In / Sync Point) ---
 builder.add_node("aggregator", aggregator_node)
-
-# --- 3. Judicial Layer (Parallel Fan-Out) ---
+builder.add_node("judges_router", judges_router)
 builder.add_node("prosecutor", prosecutor_node)
 builder.add_node("defense", defense_node)
 builder.add_node("tech_lead", tech_lead_node)
-
-# --- 4. Chief Justice (Synthesis Point) ---
 builder.add_node("chief", chief_justice_node)
 
-# --- Defined Flow ---
-
-# START -> Parallel Detectives
+# 2️⃣ START → Detectives (Parallel Fan-Out)
 builder.add_edge(START, "detect_repo")
 builder.add_edge(START, "detect_doc")
 
-# Parallel Detectives -> Aggregator (Sync)
+# 3️⃣ Detectives → Aggregator (Fan-In)
 builder.add_edge("detect_repo", "aggregator")
 builder.add_edge("detect_doc", "aggregator")
 
-# Aggregator -> Conditional Guard -> Parallel Judges
+# 4️⃣ Aggregator → Conditional Routing
 builder.add_conditional_edges(
     "aggregator",
     evidence_guard,
     {
-        "ok": ["prosecutor", "defense", "tech_lead"],
+        "ok": "judges_router",   # must be single node
         "fail": END
     }
 )
 
-# Parallel Judges -> Chief Justice (Final Sync)
+# 5️⃣ Router → Judges (Parallel Fan-Out)
+builder.add_edge("judges_router", "prosecutor")
+builder.add_edge("judges_router", "defense")
+builder.add_edge("judges_router", "tech_lead")
+
+# 6️⃣ Judges → Chief (Fan-In)
 builder.add_edge("prosecutor", "chief")
 builder.add_edge("defense", "chief")
 builder.add_edge("tech_lead", "chief")
 
-# Chief Justice -> END
+# 7️⃣ Chief → END
 builder.add_edge("chief", END)
+
+# --------------------------------------------------
+# COMPILE
+# --------------------------------------------------
 
 graph = builder.compile()
