@@ -1,82 +1,61 @@
 {
-  "repo_url": "https://github.com/Sanoy24/trp1-automation-auditor",
-  "evidences": {
-    "git_forensics": [
-      {
-        "id": "EV-GIT-001",
-        "goal": "Verify progressive git commit history",
-        "found": true,
-        "content": "48 commits showing clear progression from project structure to tools, detective nodes, graph logic, judges, and chief layer.",
-        "location": "git log --oneline --reverse",
-        "rationale": "More than 3 commits exist with distinct progression.",
-        "confidence": 1.0
-      }
-    ],
-    "state_management": [
-      {
-        "id": "EV-STATE-001",
-        "goal": "Verify pydantic state with reducers",
-        "found": true,
-        "content": "class AgentState(TypedDict):\n    evidences: Annotated[Dict[str, List[Evidence]], operator.ior]\n    opinions: Annotated[List[JudicialOpinion], operator.add]",
-        "location": "src/state.py",
-        "rationale": "Uses TypedDict, BaseModel for Evidence/Opinion, and operator.add/operator.ior as reducers.",
-        "confidence": 1.0
-      }
-    ],
-    "graph_orchestration": [
-      {
-        "id": "EV-GRAPH-001",
-        "goal": "Verify fan-out/fan-in parallel architecture",
-        "found": true,
-        "content": "builder.add_edge(START, 'repo_investigator')\nbuilder.add_edge(START, 'doc_analyst')\nbuilder.add_edge('repo_investigator', 'evidence_aggregator')\nbuilder.add_edge('evidence_aggregator', route_after_aggregation)",
-        "location": "src/graph.py",
-        "rationale": "Parallel execution paths defined. Synchronization (aggregator) node and conditional error routing are present.",
-        "confidence": 1.0
-      }
-    ],
-    "safe_tool_engineering": [
-      {
-        "id": "EV-SAFE-001",
-        "goal": "Verify safe tool cloning operations",
-        "found": true,
-        "content": "tmp_dir = tempfile.mkdtemp(prefix=\"auditor_clone_\")\nsubprocess.run(...)",
-        "location": "src/tools/repo_tools.py",
-        "rationale": "Git clone sandboxed in temporary directory using subprocess with check=True. No raw os.system calls exist.",
-        "confidence": 1.0
-      }
-    ],
-    "structured_output": [
-      {
-        "id": "EV-STRUCT-001",
-        "goal": "Verify Pydantic structured output enforcement",
-        "found": true,
-        "content": "structured_llm = base_llm.with_structured_output(JudicialOpinion)\nresult = structured_llm.invoke(messages)",
-        "location": "src/nodes/judges.py",
-        "rationale": ".with_structured_output() used to bind to JudicialOpinion schema with retry logic.",
-        "confidence": 1.0
-      }
-    ],
-    "judicial_nuance": [
-      {
-        "id": "EV-JUDGE-001",
-        "goal": "Verify distinct personas",
-        "found": true,
-        "content": "PROSECUTOR: 'Trust No One. Assume Vibe Coding.'\nDEFENSE: 'Reward Effort and Intent'\nTECH_LEAD: 'Does it actually work? Is it maintainable?'",
-        "location": "src/nodes/judges.py",
-        "rationale": "Prompts are explicitly adversarial, forgiving, and pragmatic respectively. Max difference observed.",
-        "confidence": 1.0
-      }
-    ],
-    "chief_justice": [
-      {
-        "id": "EV-CHIEF-001",
-        "goal": "Verify Chief deterministic resolution rules",
-        "found": true,
-        "content": "if security_violated and criterion_id in {...}:\n    final_score = 3\nif defense_opinions and ...:\n    final_score = min(final_score, 2)",
-        "location": "src/nodes/justice.py",
-        "rationale": "Hardcoded python logic rules for Security override, Evidence supremacy, and TechLead weight applied instead of LLM mapping.",
-        "confidence": 1.0
-      }
-    ]
-  }
+  "project_url": "https://github.com/eyor-gech/Automaton-Auditor",
+  "evidence": [
+    {
+      "id": "EVD-GIT-1",
+      "dimension": "git_forensic_analysis",
+      "fact": "Git log contains 65 commits showing iterative progression from setup to orchestration to specific features. Significant commits include 'Modifed nodes, graph and state for Judicial and Chief agent' and 'feat(graph-orchestration): implement parallel fan-out/fan-in'. No single bulk commit.",
+      "source": "git_log.txt",
+      "confidence": 1.0,
+      "goal": "Verify iterative development history"
+    },
+    {
+      "id": "EVD-STATE-1",
+      "dimension": "state_management_rigor",
+      "fact": "AgentState uses TypedDict. Evidence and JudicialOpinion are Pydantic BaseModels. Parallel lists use 'Annotated[List, operator.add]'.",
+      "source": "src/state.py",
+      "confidence": 1.0,
+      "goal": "Verify state reducers and typed schemas"
+    },
+    {
+      "id": "EVD-GRAPH-1",
+      "dimension": "graph_orchestration",
+      "fact": "Graph implements explicit fan-out/fan-in. Detectives branch out and sync at 'detectives_sync'. Judges branch out from router and map to 'chief_justice_node'. Conditional routing present via 'evidence_guard'.",
+      "source": "src/graph.py",
+      "confidence": 1.0,
+      "goal": "Verify parallel topology and error handling"
+    },
+    {
+      "id": "EVD-TOOL-1",
+      "dimension": "safe_tool_engineering",
+      "fact": "Git cloning occurs inside a 'tempfile.mkdtemp' acting as a sandbox, managed with a context manager. It uses GitPython's 'Repo.clone_from' and handles exceptions via `GitCommandError`. No raw `os.system` is present.",
+      "source": "src/tools/repo_tools.py",
+      "confidence": 1.0,
+      "goal": "Verify sandboxing and safe command execution"
+    },
+    {
+      "id": "EVD-OUT-1",
+      "dimension": "structured_output_enforcement",
+      "fact": "Judge nodes use 'get_structured_llm(JudicialOpinion)' combined with retry loops (MAX_RETRIES=2) and explicit evidence validation checks ('not set(opinion.cited_evidence).issubset(valid_evidence_ids)').",
+      "source": "src/nodes/judges.py",
+      "confidence": 1.0,
+      "goal": "Verify structured output validation and retries"
+    },
+    {
+      "id": "EVD-JUDGE-1",
+      "dimension": "judicial_nuance",
+      "fact": "Prompts are distinct. Prosecutor looks for 'Security flaws', 'Lazy engineering'. Defense focuses on 'Effort', 'Iterative progress'. TechLead prioritizes 'Structural correctness', 'Reducer safety'.",
+      "source": "src/nodes/judges.py",
+      "confidence": 1.0,
+      "goal": "Verify conflicting persona designs"
+    },
+    {
+      "id": "EVD-CHIEF-1",
+      "dimension": "chief_justice_synthesis",
+      "fact": "Synthesis uses deterministic python logic. Implements Rule of Security Supremacy ('PROSECUTOR overrides'), Rule of Fact Supremacy (penalty for hallucination), and Architecture Weight ('TechLead Preference'). Calculates variance and appends dissent strings.",
+      "source": "src/nodes/chief_justice.py",
+      "confidence": 1.0,
+      "goal": "Verify deterministic conflict resolution"
+    }
+  ]
 }
