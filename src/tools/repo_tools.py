@@ -5,7 +5,8 @@ import tempfile
 import ast
 from contextlib import contextmanager
 from git import Repo, GitCommandError
-
+import ast
+from collections import defaultdict
 GIT_URL_REGEX = re.compile(r"^(https:\/\/|git@)([\w\.@]+)(\/|:)([\w\-\_]+\/[\w\-\_]+)(\.git)?$")
 
 def validate_git_url(repo_url: str) -> bool:
@@ -26,40 +27,80 @@ def clone_repo_sandboxed(repo_url: str):
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 def analyze_repo_complexity(repo_path: str) -> dict:
-    """AST Analysis: Detect Parallelism, Pydantic usage, and State patterns."""
-    stats = {"parallel_wiring": False, "pydantic_models": 0, "state_reducers": 0}
-    
+    """
+    Deep structural AST analysis:
+    - Detect graph fan-out/fan-in topology
+    - Detect reducer annotations
+    - Detect Pydantic/TypedDict models
+    """
+
+    stats = {
+        "parallel_wiring": False,
+        "fan_out_nodes": 0,
+        "fan_in_nodes": 0,
+        "state_reducers": 0,
+        "pydantic_models": 0
+    }
+
+    edge_map = defaultdict(list)
+
     for root, _, files in os.walk(repo_path):
         for file in files:
-            if not file.endswith(".py"): 
+            if not file.endswith(".py"):
                 continue
+
             file_path = os.path.join(root, file)
+
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     tree = ast.parse(f.read(), filename=file_path)
-                
-                for node in ast.walk(tree):
-                    # Detect Parallel Edges: multiple downstream targets
-                    if isinstance(node, ast.Call) and hasattr(node.func, 'attr'):
-                        if node.func.attr in ['add_edge', 'add_conditional_edges']:
-                            if len(node.args) >= 2:
-                                if isinstance(node.args[1], (ast.List, ast.Tuple)):
-                                    if len(node.args[1].elts) > 1:
-                                        stats["parallel_wiring"] = True
 
-                    # Detect Pydantic Models
+                for node in ast.walk(tree):
+
+                    # Detect add_edge("A", "B")
+                    if isinstance(node, ast.Call) and hasattr(node.func, "attr"):
+                        if node.func.attr == "add_edge":
+                            if len(node.args) >= 2:
+                                src = getattr(node.args[0], "value", None)
+                                dst = getattr(node.args[1], "value", None)
+                                if isinstance(src, str) and isinstance(dst, str):
+                                    edge_map[src].append(dst)
+
+                        if node.func.attr == "add_conditional_edges":
+                            # conditional edges count as structural routing
+                            stats["parallel_wiring"] = True
+
+                    # Detect reducer usage via Annotated[List, operator.add]
+                    if isinstance(node, ast.Subscript):
+                        if hasattr(node, "slice"):
+                            if "Annotated" in ast.unparse(node):
+                                if "operator.add" in ast.unparse(node) or "operator.ior" in ast.unparse(node):
+                                    stats["state_reducers"] += 1
+
+                    # Detect Pydantic / TypedDict models
                     if isinstance(node, ast.ClassDef):
                         for base in node.bases:
-                            base_id = getattr(base, 'id', None) or getattr(getattr(base, 'attr', None), 'id', None)
-                            if base_id in ['BaseModel', 'TypedDict']:
+                            base_name = getattr(base, "id", None)
+                            if base_name in ["BaseModel", "TypedDict"]:
                                 stats["pydantic_models"] += 1
-
-                    # Detect Reducers usage (Annotated + operator.add / operator.ior)
-                    if isinstance(node, ast.Call) and getattr(getattr(node.func, 'attr', None), 'lower', lambda: '')() in ['add', 'ior']:
-                        stats["state_reducers"] += 1
 
             except Exception:
                 continue
+
+    # Compute fan-out / fan-in
+    fan_in_counter = defaultdict(int)
+
+    for src, targets in edge_map.items():
+        if len(targets) > 1:
+            stats["fan_out_nodes"] += 1
+            stats["parallel_wiring"] = True
+        for t in targets:
+            fan_in_counter[t] += 1
+
+    for node, count in fan_in_counter.items():
+        if count > 1:
+            stats["fan_in_nodes"] += 1
+
     return stats
 
 def get_git_history(repo_path: str) -> list[dict]:
