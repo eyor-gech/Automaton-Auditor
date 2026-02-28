@@ -1,48 +1,60 @@
 from typing import List, Dict
 import os
+import pypdf
 
 def ingest_pdf_semantically(pdf_path: str) -> Dict:
     """
-    Converts PDF to structured, queryable evidence chunks.
-    Labels include architecture claims, headings, and generic text.
+    RAG-lite ingestion:
+    - Page extraction
+    - Paragraph chunking
+    - Sliding window merge
     """
+
     if not os.path.exists(pdf_path):
         return {"error": "File not found"}
-    
+
     try:
-        import pypdf
         reader = pypdf.PdfReader(pdf_path)
         chunks = []
-        for i, page in enumerate(reader.pages):
+
+        chunk_id = 0
+
+        for page_index, page in enumerate(reader.pages):
             text = page.extract_text()
-            if not text: continue
-            
-            # extract basic paragraphs
-            lines = text.split('\n')
-            for j, line in enumerate(lines):
-                p = line.strip()
-                if len(p) < 10: continue
-                
-                label = "[TEXT]"
-                if any(k in p.lower() for k in ["parallel", "fan-out", "fan-in", "state", "graph", "node", "edge"]):
-                    label = "[ARCH_CLAIM]"
-                
+            if not text:
+                continue
+
+            paragraphs = [p.strip() for p in text.split("\n\n") if len(p.strip()) > 30]
+
+            # Sliding window chunking (semantic grouping)
+            for i in range(len(paragraphs)):
+                window = " ".join(paragraphs[i:i+2])
+                if len(window) < 50:
+                    continue
+
                 chunks.append({
-                    "id": f"{i}-{j}",
-                    "label": label,
-                    "content": p,
-                    "confidence": 1.0  # fixed confidence for Master Thinker
+                    "id": f"{page_index}-{chunk_id}",
+                    "content": window,
+                    "page": page_index,
+                    "confidence": 0.95
                 })
-        return {"chunks": chunks, "metadata": {"total_elements": len(chunks)}}
-    
+                chunk_id += 1
+
+        return {"chunks": chunks, "metadata": {"total_chunks": len(chunks)}}
+
     except Exception as e:
-        return {"error": f"Semantic ingestion failed: {str(e)}"}
+        return {"error": f"Ingestion failed: {str(e)}"}
+
 
 def query_pdf_chunks(chunks: List[Dict], query: str) -> List[Dict]:
-    """Search chunks for query, preserving evidence structure."""
     q = query.lower()
-    results = []
+    scored = []
+
     for c in chunks:
-        if q in c["content"].lower():
-            results.append(c)
-    return results
+        content = c["content"].lower()
+        score = content.count(q)
+        if score > 0:
+            scored.append((score, c))
+
+    scored.sort(reverse=True, key=lambda x: x[0])
+    return [c for _, c in scored]
