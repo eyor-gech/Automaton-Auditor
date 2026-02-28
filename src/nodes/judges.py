@@ -7,7 +7,7 @@ MAX_RETRIES = 2
 
 async def run_judge(state: AgentState, name: str, persona: str):
     """
-    High-tier persona-based structured judge with retry and validation.
+    High-tier persona-based structured judge with retry, validation, and fallback.
     """
 
     structured_llm = get_structured_llm(JudicialOpinion)
@@ -51,8 +51,15 @@ Return structured JudicialOpinion.
                 break
 
             except Exception:
+                # Fallback: produce a safe default opinion on final failure
                 if attempt == MAX_RETRIES - 1:
-                    continue
+                    opinions.append(JudicialOpinion(
+                        judge=name,
+                        criterion_id=crit_id,
+                        score=1,
+                        argument="Failed to produce structured opinion after retries.",
+                        cited_evidence=[]
+                    ))
 
     return {"opinions": opinions}
 
