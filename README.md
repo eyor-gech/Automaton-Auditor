@@ -13,7 +13,7 @@ and synthesizing findings through a courtroom-inspired reasoning pipeline.
 
 The result is a reproducible audit report containing scores, dissent reasoning, and actionable remediation steps.
 
-## **What This System Does
+## **What This System Does**
 
 Automaton-Auditor automatically:
 
@@ -128,7 +128,7 @@ During execution you will see:
 
 Final report:
 ```
-reports/audit_report.md
+audits/audit_report.md
 ```
 Contains:
 - Executive summary
@@ -152,7 +152,8 @@ src/
 └── graph.py               # LangGraph orchestration
 
 ├── tests/                   # Validation & stress tests
-├── reports/                 # Generated audit reports
+├── audits/                 # Generated audit reports
+├── reports/                 # Generated reports
 ├── main.py                  # Execution entrypoint
 ├── pyproject.toml       # Locked dependency manifest
 └── README.md            # This document
