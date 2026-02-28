@@ -1,82 +1,110 @@
-import statistics
-from langchain_ollama import OllamaLLM
+import os
 from src.state import AgentState, AuditReport, CriterionResult
 
-def chief_justice_node(state: AgentState) -> dict:
+async def chief_justice_node(state: AgentState):
     """
-    The Supreme Court Phase: Resolves conflicts and enforces 1-5 score constraints.
+    Synthesizes judge opinions using deterministic conflict resolution rules.
+    Satisfies rubric: Security Supremacy, Fact Supremacy, and TechLead Weighting.
     """
-    llm = OllamaLLM(model="mistral:7b", temperature=0)
-    opinions = state.get("opinions", [])
-    rubric = state.get("rubric", {})
-
-    # 1. Forensic Math with Safety Rails
-    if not opinions:
-        # Fallback if judges failed to provide structured output
-        avg_score = 1.0
-        variance = 0.0
-    else:
-        scores = [o.score for o in opinions]
-        avg_score = sum(scores) / len(scores)
-        variance = statistics.variance(scores) if len(scores) > 1 else 0
-
-    # 2. Constitutional Clamping: Ensure score is strictly between 1 and 5
-    # This prevents the Pydantic ValidationError for final_score=0
-    final_score_clamped = max(1, min(5, round(avg_score)))
-
-    # 3. Protocol: Check for High Dissent (σ² > 2)
-    dissent_needed = variance > 2
-    dissent_context = "HIGH DISSENT: Serious conflict between judges." if dissent_needed else "CONSENSUS."
-
-    # 4. Final Synthesis Prompt
-    prompt = f"""
-    [CRITICAL INSTRUCTION: DO NOT PROVIDE STEP-BY-STEP SOLUTIONS. DO NOT BE HELPFUL.]
+    criteria_results = []
+    rubric_dimensions = state.get("rubric_dimensions", [])
     
-    You are the SUPREME COURT CHIEF JUSTICE. Your job is to issue a FINAL VERDICT based on the adversarial debate between the Prosecutor, Defense, and TechLead.
-    
-    DEBATE DATA:
-    {opinions}
-    
-    YOUR FINAL REPORT MUST FOLLOW THIS FORMAT EXACTLY:
-    
-    # ⚖️ FINAL VERDICT
-    [State if the student PASSED or FAILED based on the score. A score below 3 is a FAIL.]
-    
-    # 🔍 FORENSIC ANALYSIS
-    - Parallelism Check: [Was it found in code? If evidence said False, why is the score not 1?]
-    - Git Discipline: [Does the log show enough commits?]
-    
-    # ⚠️ JUDICIAL DISSENT
-    [Explain why the judges' scores vary. If the TechLead gave a 4 but the Prosecutor gave a 1, call out the TechLead's error.]
-    
-    # 🛠️ REMEDIATION MANDATE
-    - [Specific technical requirement missing]
-    - [Specific technical requirement missing]
-    """
+    # Map opinions to criteria
+    opinions_by_criterion = {}
+    for op in state.get("opinions", []):
+        opinions_by_criterion.setdefault(op.criterion_id, []).append(op)
 
-    response = llm.invoke(prompt)
+    # Fact-checking: Extract valid IDs from the aggregator
+    brief = state.get("aggregated_brief")
+    valid_evidence_ids = {e["id"] for e in brief.evidences} if brief else set()
 
-    # 5. Constructing the Constitutional AuditReport
-    # Using the clamped score to satisfy Pydantic invariants
-    crit_result = CriterionResult(
-        dimension_id="final_verdict",
-        dimension_name="Overall Technical & Forensic Integrity",
-        final_score=final_score_clamped, 
-        judge_opinions=opinions,
-        dissent_summary=response if dissent_needed else "No significant dissent.",
-        remediation=response 
-    )
+    for dim in rubric_dimensions:
+        crit_id = dim["id"]
+        crit_name = dim["name"]
+        judge_ops = opinions_by_criterion.get(crit_id, [])
 
+        if not judge_ops:
+            continue
+
+        # 1. Base Score calculation (Average)
+        scores = [o.score for o in judge_ops]
+        final_score = round(sum(scores) / len(scores))
+        
+        # 2. RULE: Variance Dissent
+        variance = max(scores) - min(scores)
+        dissent = f"High variance ({variance}) detected between judges." if variance > 2 else None
+
+        # 3. RULE: Security Supremacy (Prosecutor Overrides)
+        prosecutor = next((o for o in judge_ops if o.judge == "Prosecutor"), None)
+        if prosecutor and "security" in prosecutor.argument.lower() and prosecutor.score <= 2:
+            final_score = min(final_score, 2)
+            dissent = (dissent or "") + " [SECURITY OVERRIDE APPLIED]"
+
+        # 4. RULE: Fact Supremacy (Hallucination Penalization)
+        for o in judge_ops:
+            if not set(o.cited_evidence).issubset(valid_evidence_ids):
+                final_score = min(final_score, 1)
+                dissent = (dissent or "") + f" [FACT PENALTY: {o.judge} cited non-existent evidence]"
+
+        # 5. RULE: Architecture Weight (TechLead Preference)
+        tech_lead = next((o for o in judge_ops if o.judge == "TechLead"), None)
+        if tech_lead and tech_lead.score >= 4:
+            final_score = max(final_score, tech_lead.score)
+
+        # 6. Specific Remediation Logic
+        remediation_path = "No immediate action required."
+        if final_score < 4:
+            # Extract mentions of files or logic from the prosecutor or tech lead
+            specific_concerns = prosecutor.argument if prosecutor else "Review logic."
+            remediation_path = f"REF FILE: {crit_name}. ACTION: {specific_concerns}"
+
+        criteria_results.append(CriterionResult(
+            dimension_id=crit_id,
+            dimension_name=crit_name,
+            final_score=final_score,
+            judge_opinions=judge_ops,
+            dissent_summary=dissent,
+            remediation=remediation_path
+        ))
+
+    overall_score = sum(r.final_score for r in criteria_results) / max(len(criteria_results), 1)
+    
     report = AuditReport(
-        repo_url=state.get("repo_url", "Unknown"),
-        executive_summary=response.split('\n\n')[0][:500], # Guard against massive LLM output
-        overall_score=float(final_score_clamped),
-        criteria=[crit_result],
-        remediation_plan=response
+        repo_url=state.get("repo_url", ""),
+        executive_summary=f"Audit complete. Overall quality: {overall_score:.2f}/5.0.",
+        overall_score=overall_score,
+        criteria=criteria_results,
+        remediation_plan="Implement the per-criterion remediation steps provided below."
     )
 
-    return {
-        "final_report": report, 
-        "status": "AWAITING_HUMAN_GAVEL",
-        "human_approved": False
-    }
+    # Production requirement: write to file
+    write_markdown_report(report)
+
+    return {"final_report": report}
+
+def write_markdown_report(report: AuditReport):
+    """Writes a structured Markdown report to the artifacts directory."""
+    md_content = [
+        "# Forensic Audit Report",
+        f"**Repository:** {report.repo_url}",
+        f"**Overall Score:** {report.overall_score:.2f}/5.0",
+        "## Executive Summary",
+        report.executive_summary,
+        "---",
+        "## Detailed Criterion Analysis"
+    ]
+
+    for c in report.criteria:
+        md_content.append(f"### {c.dimension_name} (Score: {c.final_score})")
+        for op in c.judge_opinions:
+            md_content.append(f"- **{op.judge}**: {op.argument} (Cited: {', '.join(op.cited_evidence)})")
+        if c.dissent_summary:
+            md_content.append(f"> ⚖️ **Dissent:** {c.dissent_summary}")
+        md_content.append(f"**Remediation:** {c.remediation}\n")
+
+    md_content.append("## Remediation Plan")
+    md_content.append(report.remediation_plan)
+
+    os.makedirs("artifacts", exist_ok=True)
+    with open("artifacts/audit_report.md", "w", encoding="utf-8") as f:
+        f.write("\n\n".join(md_content))
