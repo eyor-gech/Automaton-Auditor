@@ -43,8 +43,8 @@ class AgentState(TypedDict):
     pdf_path: str
     rubric_dimensions: List[Dict]
     # Using operator.add for list-based accumulation in parallel nodes
-    evidences: Annotated[List[Evidence], operator.add] 
-    opinions: Annotated[List[JudicialOpinion], operator.add]
-    aggregated_brief: Optional[AggregatedBrief]
-    final_report: Optional[AuditReport]
+    evidences: Annotated[List, operator.add] 
+    opinions: Annotated[List, operator.add]
+    aggregated_brief: Optional[dict]
+    final_report: Optional[dict]
     errors: Annotated[List[str], operator.add]
