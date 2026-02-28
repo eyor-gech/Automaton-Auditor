@@ -9,3 +9,4 @@ git_log.txt
 pdf_text.txt
 peer_repo/
 .pytest_cache/
+doc/
