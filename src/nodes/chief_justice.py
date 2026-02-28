@@ -111,6 +111,8 @@ def write_markdown_report(report: AuditReport):
     md_content.append("## Remediation Plan")
     md_content.append(report.remediation_plan)
 
-    os.makedirs("artifacts", exist_ok=True)
-    with open("artifacts/audit_report.md", "w", encoding="utf-8") as f:
+    os.makedirs("report_onself_generated", exist_ok=True)
+    with open("report_onself_generated/audit_report.md", "w", encoding="utf-8") as f:
         f.write("\n\n".join(md_content))
+
+#https://github.com/eyor-gech/Automaton-Auditor
