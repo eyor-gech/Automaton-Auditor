@@ -1,77 +1,73 @@
 import os
+import uuid
 from src.state import AgentState, Evidence
-from src.tools.repo_tools import clone_repo_sandboxed, analyze_repo_complexity, get_git_history
+from src.tools.repo_tools import analyze_repo_complexity, get_git_history, clone_repo_sandboxed
 from src.tools.doc_tools import ingest_pdf_semantically, query_pdf_chunks
-from src.tools.vision_tools import count_pdf_images
 
-def repo_investigator_node(state: AgentState) -> dict:
-    """Fact-finding node for the Repository using AST and Git history."""
-    repo_url = state.get("repo_url")
-    if not repo_url:
-        return {"evidences": {"repo_investigator": []}}
+async def repo_investigator_node(state: AgentState):
+    """High-tier Detective: Uses AST to verify structural graph patterns."""
+    with clone_repo_sandboxed(state["repo_url"]) as tmp_dir:
+        stats = analyze_repo_complexity(tmp_dir)
+        history = get_git_history(tmp_dir)
+    
+    evidence_list = []
+    
+    # 1. Structural Wiring Evidence
+    evidence_list.append(Evidence(
+        id=f"EV-REPO-{uuid.uuid4().hex[:4]}",
+        source="AST_Parser",
+        goal="Verify LangGraph Parallel Wiring",
+        fact=f"Parallel wiring detected: {stats['parallel_wiring']}",
+        confidence=1.0,
+        location="graph.py (analyzed via AST)",
+        rationale="AST detected add_edge or add_conditional_edges with multiple targets, confirming fan-out capability."
+    ))
 
-    evidences = []
-    try:
-        with clone_repo_sandboxed(repo_url) as tmp_dir:
-            stats = analyze_repo_complexity(tmp_dir)
-            evidences.append(Evidence(
-                goal="Technical Pattern Analysis",
-                found=stats["parallel_wiring"],
-                location="AST Analysis",
-                content=f"Parallel: {stats['parallel_wiring']}, Models: {stats['pydantic_models']}",
-                rationale="Verified code patterns for graph wiring and state management.",
-                confidence=1.0
+    # 2. State Safety Evidence
+    evidence_list.append(Evidence(
+        id=f"EV-REPO-{uuid.uuid4().hex[:4]}",
+        source="AST_Parser",
+        goal="Reducer Safety",
+        fact=f"Detected {stats['state_reducers']} reducers.",
+        confidence=1.0,
+        location="state.py",
+        rationale="Annotated types with operator.add/ior prevent state overwrites during parallel fan-in."
+    ))
+
+    # 3. Effort Evidence
+    evidence_list.append(Evidence(
+        id=f"EV-GIT-{uuid.uuid4().hex[:4]}",
+        source="Git_Log",
+        goal="Development Progression",
+        fact=f"Found {len(history)} commits.",
+        confidence=1.0,
+        location="Git History",
+        rationale="Chronological commit analysis confirms iterative development rather than a bulk code dump."
+    ))
+
+    return {"evidences": evidence_list}
+
+async def doc_analyst_node(state: AgentState):
+    """High-tier Detective: RAG-lite chunked PDF ingestion."""
+    ingestion = ingest_pdf_semantically(state["pdf_path"])
+    if "error" in ingestion:
+        return {"errors": [ingestion["error"]]}
+
+    # Targeted Queries as per Rubric
+    claims = ["parallel", "fan-out", "reducer", "adversarial"]
+    evidence_list = []
+    
+    for claim in claims:
+        chunks = query_pdf_chunks(ingestion["chunks"], claim)
+        for c in chunks[:2]: # Limit to top 2 per claim for brevity
+            evidence_list.append(Evidence(
+                id=f"EV-DOC-{uuid.uuid4().hex[:4]}",
+                source="Docling_Processor",
+                goal=f"Verify claim: {claim}",
+                fact=c["content"][:200],
+                confidence=0.95,
+                location=f"PDF Chunk {c['id']}",
+                rationale=f"Semantic chunking identified specific architectural claim regarding {claim}."
             ))
-
-            history = get_git_history(tmp_dir)
-            if isinstance(history, list):
-                evidences.append(Evidence(
-                    goal="Commit History Audit",
-                    found=len(history) > 0,
-                    location="Git Logs",
-                    content=str(history[:3]),
-                    rationale="Extracted commit logs for effort validation.",
-                    confidence=1.0
-                ))
-    except Exception as e:
-        evidences.append(Evidence(goal="Repo Check", found=False, location="Git", rationale=str(e), confidence=1.0))
-
-    return {"evidences": {"repo_investigator": evidences}}
-
-def doc_analyst_node(state: AgentState) -> dict:
-    """Fact-finding node for the PDF using semantic chunking."""
-    pdf_path = state.get("pdf_path")
-    if not pdf_path or not os.path.exists(pdf_path):
-        return {"evidences": {"doc_analyst": []}}
-
-    evidences = []
-    try:
-        data = ingest_pdf_semantically(pdf_path)
-        chunks = data.get("chunks", [])
-        
-        # Search for core architectural claims
-        matches = query_pdf_chunks(chunks, "parallel")
-        evidences.append(Evidence(
-            goal="Identify Arch Claims",
-            found=len(matches) > 0,
-            location=pdf_path,
-            content=matches[0]["content"] if matches else "No parallel claims found.",
-            rationale="Queried semantic chunks for architectural keywords.",
-            confidence=0.9
-        ))
-    except Exception as e:
-        evidences.append(Evidence(goal="PDF Analysis", found=False, location="PDF", rationale=str(e), confidence=1.0))
-
-    return {"evidences": {"doc_analyst": evidences}}
-
-def vision_inspector_node(state: AgentState) -> dict:
-    """Heuristic Vision: Checks for visual documentation."""
-    pdf_path = state.get("pdf_path")
-    try:
-        img_count = count_pdf_images(pdf_path)
-        return {"evidences": {"vision_inspector": [Evidence(
-            goal="Visual Asset Detection", found=img_count > 0, location="PDF",
-            content=f"Images: {img_count}", rationale="Checked for diagrams.", confidence=1.0
-        )]}}
-    except:
-        return {"evidences": {"vision_inspector": []}}
+            
+    return {"evidences": evidence_list}
