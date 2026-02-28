@@ -20,8 +20,9 @@ class JudicialOpinion(BaseModel):
     cited_evidence: List[str]
 
 class AggregatedBrief(BaseModel):
-    evidences: List[Dict[str, Any]]
-    hallucination_flags: List[str]
+    evidences: List[Evidence]
+    hallucination_flags: List[str] # or List[Evidence]
+    summary: str
 
 class CriterionResult(BaseModel):
     dimension_id: str
