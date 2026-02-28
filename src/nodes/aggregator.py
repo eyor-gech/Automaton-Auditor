@@ -1,38 +1,20 @@
-# src/nodes/aggregator.py
-import os
-from src.state import AgentState, Evidence
-from langchain_google_genai import ChatGoogleGenerativeAI
-from dotenv import load_dotenv
-
-load_dotenv()
+from src.state import AgentState, AggregatedBrief
+from src.llm.llm_factory import get_structured_llm
 
 async def aggregator_node(state: AgentState):
-    """
-    Collects all detective evidence, cross-validates, and flags hallucinations.
-    Produces 'aggregated_brief' for judges.
-    """
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
-        google_api_key=os.getenv("GEMINI_AGGREGATOR_KEY")
-    )
-
-    findings = state.get("evidences", {})
-
+    """Collects evidence, cross-validates, and prevents judge hallucination."""
+    structured_llm = get_structured_llm(AggregatedBrief)
+    
+    evidences_raw = [e.dict() for e in state.get("evidences", [])]
+    
     prompt = f"""
-    You are the Evidence Aggregator.
-    Review all detective findings: {findings}.
-    Tasks:
-    1. Identify any hallucinated claims (non-existent files or unsupported assertions).
-    2. Consolidate valid facts with evidence ids.
-    3. Return JSON object:
-       {{
-           "evidences": [{{"id": evidence_id, "source": source, "fact": fact}}]
-       }}
+    Review the following forensic evidence collected by detectives:
+    {evidences_raw}
+
+    1. Cross-reference claims.
+    2. Flag any internal contradictions or unsupported claims as 'hallucination_flags'.
+    3. Return a clean, consolidated list of evidence for the Judicial layer.
     """
-
-    res = await llm.ainvoke(prompt)
-
-    return {
-        "aggregated_brief": res.content,
-        "status": "EVIDENCE_SYNCHRONIZED"
-    }
+    
+    brief = await structured_llm.ainvoke(prompt)
+    return {"aggregated_brief": brief}
