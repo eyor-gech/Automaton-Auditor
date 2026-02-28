@@ -2,76 +2,178 @@
 
 # 🕵️ **Automaton-Auditor**
 ## **Forensic Governance Swarm for AI-Generated Code**
-- Automaton-Auditor is a multi-agent system built on LangGraph designed to perform high-integrity audits of software repositories. Moving beyond "vibe-based" reviews, it uses a Triple-Diamond architecture to cross-reference code (AST), documentation (OCR/Markdown), and visual diagrams (Vision) to identify hallucinations and architectural drift.
-## **🏗️ Architecture: The Triple-Threat Fan-Out**
-The system currently implements the **Detective Layer**. It utilizes a parallel fan-out pattern to gather multi-modal evidence before synchronizing at a metacognitive aggregator.
-  - **RepoInvestigator**: Deep AST parsing to verify graph wiring and structural logic.
-  - **DocAnalyst**: OCR-backed ingestion of PDF reports to extract theoretical claims.
-  - **VisionInspector**: Heuristic image extraction to verify the presence of architectural diagrams.
-  - **Evidence Aggregator**: A synchronization node that flags discrepancies (e.g., PDF claims "Parallelism" while AST shows "Linear").
-## **🛠️ Setup Instructions**
-1. Prerequisites
-   - **Python 3.12+** (Optimized for 3.12)
-   - **uv** (Fast Python package installer and resolver)
-   - **Environment Variables**: Create a .env file in the root directory
+- Automaton-Auditor is a multi-agent forensic auditing system built with LangGraph that evaluates software repositories using structured evidence, adversarial reasoning, and deterministic synthesis.
+
+Instead of subjective or “vibe-based” code reviews, the system performs a traceable architectural audit by cross-examining:
+
+- source code structure (AST analysis),
+- written documentation (PDF ingestion),
+- architectural diagrams (vision inspection),
+and synthesizing findings through a courtroom-inspired reasoning pipeline.
+
+The result is a reproducible audit report containing scores, dissent reasoning, and actionable remediation steps.
+
+## **What This System Does
+
+Automaton-Auditor automatically:
+
+- Clones and analyzes a target repository
+- Extracts architectural claims from documentation PDFs
+- Verifies diagrams and visual artifacts
+- Cross-validates evidence across modalities
+- Runs adversarial expert evaluations (three judge personas)
+- Resolves disagreements deterministically
+- Produces a structured forensic audit report
+
+The system answers questions like:
+1) Does the implementation match architectural claims?
+2) Is parallel orchestration actually implemented?
+3) Are state reducers safe under concurrency?
+4) Are documentation claims hallucinated or verified?
+
+## **Architectural Overview**
+Automaton-Auditor follows a three-layer courtroom architecture implemented as a LangGraph StateGraph.
+
+### Detective Layer — Evidence Generation
+
+Parallel agents gather independent evidence.
+
+| Agent | Responsibility
+|---|---|
+| RepoInvestigator | AST parsing to verify graph wiring, reducers, and architecture
+| DocAnalyst | OCR/Markdown ingestion of PDFs to extract theoretical claims
+| VisionInspector | Extracts and validates architectural diagrams
+| Aggregator | Cross-validates evidence and removes hallucinations
+
+This stage implements Fan-Out → Fan-In synchronization.
+
+### Judicial Layer — Dialectical Evaluation
+
+Three specialized personas independently evaluate each rubric dimension:
+
+| Judge | Role
+|---|---|
+| Prosecutor | Security & correctness critic
+| Defense | Intent & progress evaluator
+| Tech Lead | Architecture and maintainability authority
+
+Each judge produces a structured JudicialOpinion citing verified evidence only.
+
+This creates dialectical tension instead of consensus bias.
+
+### Chief Justice — Deterministic Synthesis
+
+The Chief Justice node resolves disagreements using rules:
+  - **Security Supremacy** — critical security issues cap scores
+  - **Fact Supremacy** — invalid evidence triggers penalties
+  - **Architecture Weighting** — TechLead opinion influences final verdict
+  - **Variance Detection** — dissent generated when judges strongly disagree
+
+Output: a final AuditReport written to /artifacts/audit_report.md.
+
+## **System Flow**
+```mermaid
+flowchart TD
+START --> RepoInvestigator
+START --> DocAnalyst
+START --> VisionInspector
+
+RepoInvestigator --> Aggregator
+DocAnalyst --> Aggregator
+VisionInspector --> Aggregator
+
+Aggregator --> Prosecutor
+Aggregator --> Defense
+Aggregator --> TechLead
+
+Prosecutor --> ChiefJustice
+Defense --> ChiefJustice
+TechLead --> ChiefJustice
+
+ChiefJustice --> END
+```
+
+## **Installation**
+**Prerequisites**
+- Python 3.12+
+- `uv` package manager
+- OpenAI API key
+Create .env:
 ```Bash
 OPENAI_API_KEY=your_key_here
-LANGSMITH_API_KEY=your_key_here  # Optional: For graph tracing
+LANGSMITH_API_KEY=optional
 LANGCHAIN_TRACING_V2=true
 ```
 
-2. **Install Dependencies**
-We use uv for deterministic dependency management. This ensures your environment matches the forensic lab's requirements perfectly.
+**Install Dependencies**
 ```Bash
-# Install uv if you haven't already
 pip install uv
-
-# Sync the environment (creates .venv and installs locked dependencies)
 uv sync
 ```
-3. **System Dependencies (OCR Support)**
-The DocAnalyst uses Docling and RapidOCR. On some systems (Windows/Linux), you may need libmagic or poppler if not already present.
-## **🚀 Running the Detective Graph**
-To run a forensic audit against a target repository and its corresponding documentation, use the interim test runner:
+This creates a deterministic virtual environment matching the forensic runtime.
+
+**Running a Full Audit**
+Run the swarm against any repository + PDF report:
 ```Bash
-# Run the core detective logic
-python -m tests.test_interim_logic
+uv run python main.py \
+  --repo https://github.com/user/project.git \
+  --pdf ./architecture_report.pdf
 ```
-**Custom Audit Configuration**
-You can modify the test script or pass arguments to the AgentState:
-- **repo_url**: The GitHub/GitLab URL of the project to audit
-- **pdf_path**: Local path to the student's architecture/interim report (PDF).
-**Output Expectations**
-The system will output a series of Evidence Objects in the terminal:
-  - **✅ Success**: Artifact found (e.g., AST confirms Parallel wiring).
-  - **❌ Forensic Violation**: Discrepancy found (e.g., Hallucination Alert
-  - **⚠️ System Error**: Handled gracefully (e.g., 404 Repo URL detected).
+
+**Expected Output**
+During execution you will see:
+- Detective evidence collection
+- Judge scoring decisions
+- Final synthesized verdict
+
+Final report:
+```
+reports/audit_report.md
+```
+Contains:
+- Executive summary
+- Criterion scores
+- Judge opinions
+- Dissent explanations
+- Remediation plan
 
 ## **📂 Project Structure**
 ```Plaintext
-├── src/
-│   ├── nodes/           # Agent "Brains" (detectives.py, judges.py)
-│   ├── tools/           # Forensic tools (AST, OCR, Git)
-│   ├── state.py         # Pydantic schemas & Graph state
-│   └── graph.py         # LangGraph orchestration logic
-├── tests/               # Stress tests & wiring verification
-├── reports/             # Interim Report
+├── .agents/            # Constitution, Rules, and Guidelines for the agents
+src/
+├── nodes/
+│   ├── detectives.py      # Evidence agents
+│   ├── aggregator.py      # Metacognitive validation
+│   ├── judges.py          # Judicial personas
+│   └── chief_justice.py   # Deterministic synthesis
+│
+├── tools/                 # repo_tools.py, doc_tools.py, vision_tools.py
+├── state.py               # Typed state schemas
+└── graph.py               # LangGraph orchestration
+
+├── tests/                   # Validation & stress tests
+├── reports/                 # Generated audit reports
+├── main.py                  # Execution entrypoint
 ├── pyproject.toml       # Locked dependency manifest
 └── README.md            # This document
 ```
-## **⚖️ Roadmap**
-- Phase 1-2: Detective Swarm & Evidence Aggregation. (Completed)
-- Phase 3: Judicial Debate (Prosecutor vs. Defense vs. Tech Lead).
-- Phase 4: Chief Justice Synthesis & Remediation Planning.
+## **⚖️ Completed Phases**
+- Detective Swarm & Evidence Aggregation
+- Judicial Persona Debate
+- Chief Justice Synthesis Engine
 
 ## **General Architecture**
 <img width="5406" height="4505" alt="image" src="https://github.com/user-attachments/assets/05100c0c-dd3f-4316-9f33-994e4c29a366" />
 
-## Run Full Audit
-```bash
-uv lock
-uv sync
-uv run python main.py \
-  --repo https://github.com/user/project.git \
-  --pdf ./report.pdf
-```
+## **Design Principles**
+- **Typed State Safety**: Uses Pydantic schemas and reducers to prevent silent corruption during parallel execution.
+- **Deterministic Reasoning**: LLMs generate opinions — Python logic makes final decisions.
+- **Evidence Traceability**: Every judgment must cite verified evidence IDs.
+- **Metacognitive Validation**: The system evaluates the quality of its own evidence before judging.
+
+## **Summary**
+- Automaton-Auditor demonstrates how multi-agent systems can move from probabilistic opinions toward structured, auditable reasoning by combining:
+  - parallel evidence gathering,
+  - adversarial evaluation,
+  - deterministic synthesis.
+The result is an AI auditor that explains why a system passes or fails — not just what it thinks.
