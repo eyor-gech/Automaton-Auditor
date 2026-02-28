@@ -57,15 +57,21 @@ async def chief_justice_node(state: AgentState):
             # Extract mentions of files or logic from the prosecutor or tech lead
             specific_concerns = prosecutor.argument if prosecutor else "Review logic."
             remediation_path = f"REF FILE: {crit_name}. ACTION: {specific_concerns}"
+        
+        # 7. RULE: Excellence Burden (Prevent Blind Consensus)
+        if variance <= 1 and all(s >= 4 for s in scores):
+            total_citations = sum(len(o.cited_evidence) for o in judge_ops)
+            if total_citations < 2:
+                dissent = (dissent or "") + " [EXCELLENCE BURDEN: High score with limited citation depth]"
 
-        criteria_results.append(CriterionResult(
-            dimension_id=crit_id,
-            dimension_name=crit_name,
-            final_score=final_score,
-            judge_opinions=judge_ops,
-            dissent_summary=dissent,
-            remediation=remediation_path
-        ))
+                criteria_results.append(CriterionResult(
+                    dimension_id=crit_id,
+                    dimension_name=crit_name,
+                    final_score=final_score,
+                    judge_opinions=judge_ops,
+                    dissent_summary=dissent,
+                    remediation=remediation_path
+                ))
 
     overall_score = sum(r.final_score for r in criteria_results) / max(len(criteria_results), 1)
     
