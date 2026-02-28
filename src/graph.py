@@ -10,12 +10,32 @@ from src.nodes.chief_justice import chief_justice_node
 # ROUTER & GUARD FUNCTIONS
 # -----------------------------
 def evidence_guard(state: AgentState):
-    """Terminate early if no valid evidence exists."""
+    """Determines if the audit should continue based on collected evidence.
+    Prevents AttributeError when brief is a Pydantic object."""
     brief = state.get("aggregated_brief")
+    """
     if not brief or not brief.get("evidences"):
         return "fail"
     return "ok"
+    """
+    if brief is None:
+        print("🚨 CRITICAL: No brief found in state.")
+        return "end"
 
+    # Safely extract evidences regardless of object type
+    if isinstance(brief, dict):
+        evidences = brief.get("evidences", [])
+    else:
+        # It's a Pydantic model (AggregatedBrief)
+        evidences = getattr(brief, "evidences", [])
+
+    if not evidences:
+        print("🚨 NO EVIDENCE FOUND: Terminating to prevent Judge hallucinations.")
+        return "end"
+
+    print(f"⚖️ Guard passed: {len(evidences)} evidence items ready for trial.")
+    return "continue"
+    
 def judges_router(state: AgentState):
     """Pass-through router for LangGraph conditional edges."""
     return state
