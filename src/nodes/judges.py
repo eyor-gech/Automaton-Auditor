@@ -1,59 +1,106 @@
-from langchain_ollama import OllamaLLM
-from langchain_core.output_parsers import PydanticOutputParser
-from src.state import AgentState, JudicialOpinion, JudicialDecision # Import both
+# src/nodes/judges.py
 
-# We use the Decision model for the LLM to fill out, then map it to Opinion for the State
-parser = PydanticOutputParser(pydantic_object=JudicialDecision)
+from src.state import AgentState, JudicialOpinion
+from src.llm.llm_factory import get_structured_llm
 
-def run_judicial_node(state: AgentState, judge_type: str, model: str, persona_prompt: str):
-    """Universal factory for constitutional judges."""
-    llm = OllamaLLM(model=model, temperature=0)
-    
-    prompt = f"""
-    ### CONSTITUTIONAL MANDATE ###
-    ou are a Forensic Auditor. 
-    If the evidence does not match the rubric, you must penalize. 
-    Being 'nice' is a violation of the protocol.
+MAX_RETRIES = 2
 
-    ### THE LAW (RUBRIC) ###
-    {state['rubric']}
-
-    ### THE EVIDENCE ###
-    {state['evidences']}
-
-    ### TASK ###
-    1. Compare the EVIDENCE directly against the RUBRIC.
-    2. If the evidence shows 'Parallel: False' and the rubric demands 'Parallel: True' for a 5, you MUST give a 1.
-    3. Your reasoning must be: "Evidence shows [X], but Rubric requires [Y]. Score: [Z]."
-
-    {parser.get_format_instructions()}
+async def run_judge(state: AgentState, name: str, persona: str):
     """
-    
-    try:
-        response = llm.invoke(prompt)
-        decision = parser.parse(response)
-        
-        # Map to the JudicialOpinion model defined in your state.py
-        opinion = JudicialOpinion(
-            judge=judge_type,
-            criterion_id="logic_and_impl", 
-            score=decision.score,
-            argument=decision.reasoning,
-            cited_evidence=decision.citations
-        )
-        return {"opinions": [opinion]}
-    except Exception as e:
-        return {"status": f"error_{judge_type.lower()}", "instructor_feedback": f"Parser error: {str(e)}"}
+    High-tier persona-based structured judge with retry and validation.
+    """
 
-# The Three Constitutional Nodes
-def prosecutor_node(state: AgentState):
-    return run_judicial_node(state, "Prosecutor", "llama3.2", 
-        "Strict, skeptical, and focused on missing implementation or 'vaporware' claims.")
+    structured_llm = get_structured_llm(JudicialOpinion)
+    opinions = []
 
-def defense_node(state: AgentState):
-    return run_judicial_node(state, "Defense", "llama3.2", 
-        "Advocate for the student. Highlight intent, effort in Git logs, and partial successes.")
+    valid_evidence_ids = {
+        e["id"] for e in state.get("aggregated_brief", {}).get("evidences", [])
+    }
 
-def tech_lead_node(state: AgentState):
-    return run_judicial_node(state, "TechLead", "mistral:7b", 
-        "Pragmatic engineer. Ignore the 'talk'—focus on Pydantic models, AST results, and code structure.")
+    for dim in state.get("rubric_dimensions", []):
+        crit_id = dim["id"]
+        crit_name = dim["name"]
+
+        prompt = f"""
+You are acting as: {persona}
+
+Evaluate rubric criterion:
+Name: {crit_name}
+ID: {crit_id}
+
+Instructions:
+- Score strictly 1–5
+- Cite ONLY evidence IDs that exist
+- If evidence is insufficient, penalize score
+- Do not hallucinate
+- Justify using adversarial reasoning appropriate to your role
+
+Return structured JudicialOpinion.
+"""
+
+        for attempt in range(MAX_RETRIES):
+            try:
+                opinion = await structured_llm.ainvoke(prompt)
+                opinion.judge = name
+
+                # Validate cited evidence
+                if not set(opinion.cited_evidence).issubset(valid_evidence_ids):
+                    raise ValueError("Invalid evidence cited")
+
+                opinions.append(opinion)
+                break
+
+            except Exception:
+                if attempt == MAX_RETRIES - 1:
+                    continue
+
+    return {"opinions": opinions}
+
+
+async def prosecutor_node(state: AgentState):
+    return await run_judge(
+        state,
+        name="Prosecutor",
+        persona="""
+Adversarial security auditor.
+You aggressively search for:
+- Security flaws
+- Missing validation
+- Architectural shortcuts
+- Lazy engineering decisions
+You penalize undocumented assumptions.
+"""
+    )
+
+
+async def defense_node(state: AgentState):
+    return await run_judge(
+        state,
+        name="Defense",
+        persona="""
+Supportive evaluator.
+You reward:
+- Effort
+- Iterative progress
+- Creative workarounds
+- Demonstrated learning
+You assume good intent unless proven otherwise.
+"""
+    )
+
+
+async def tech_lead_node(state: AgentState):
+    return await run_judge(
+        state,
+        name="TechLead",
+        persona="""
+Senior pragmatic architect.
+You prioritize:
+- Structural correctness
+- Maintainability
+- Reducer safety
+- Parallel graph integrity
+Cosmetic flaws are low priority.
+Architecture weighs most.
+"""
+    )
