@@ -1,3 +1,4 @@
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/eyor-gech/Automaton-Auditor)
 **Description**: Automated Auditor Swarms for QA: Multi-agent system that verifies code, evaluates architecture, and provides actionable feedback.
 
 # 🕵️ **Automaton-Auditor**
